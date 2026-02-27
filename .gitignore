@@ -1,0 +1,8 @@
+*.tfstate
+*.tfstate.backup
+assignmentkey.pem
+terraform-provider-aws*
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.pem
