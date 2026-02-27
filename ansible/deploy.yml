@@ -1,19 +1,21 @@
 ---
-- hosts: all
+- name: Deploy MyProject on EC2
+  hosts: all
   become: yes
   vars:
-    project_dir: "~/myproject"
-    docker_image: "myproject"
-    docker_container: "myproject"
+    project_dir: /home/ubuntu/myproject
 
   tasks:
-    - name: Ensure Docker is installed
+    - name: Install required packages
       apt:
-        name: docker.io
+        name: "{{ item }}"
         state: present
         update_cache: yes
+      loop:
+        - docker.io
+        - python3-pip
 
-    - name: Ensure user is in docker group
+    - name: Add ubuntu user to docker group
       user:
         name: ubuntu
         groups: docker
@@ -21,23 +23,23 @@
 
     - name: Copy project files to EC2
       copy:
-        src: "{{ project_dir }}/"
-        dest: "{{ project_dir }}/"
+        src: ../
+        dest: "{{ project_dir }}"
         owner: ubuntu
         group: ubuntu
         mode: 0755
 
     - name: Build Docker image
       community.docker.docker_image:
+        name: myproject
+        source: build
         build:
           path: "{{ project_dir }}"
-        name: "{{ docker_image }}"
-        state: present
 
     - name: Run Docker container
       community.docker.docker_container:
-        name: "{{ docker_container }}"
-        image: "{{ docker_image }}"
+        name: myproject
+        image: myproject
         state: started
         restart_policy: unless-stopped
         ports:
