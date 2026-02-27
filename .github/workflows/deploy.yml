@@ -8,15 +8,31 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.8.1
-        with:
-          ssh-private-key: ${{ secrets.EC2_KEY }}
-
-      - name: Run Ansible Playbook
+      - name: Setup SSH Key
         run: |
-          ansible-playbook -i ${{ secrets.EC2_HOST }}, deploy.yml
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_KEY }}" > ~/.ssh/private_key.pem
+          chmod 600 ~/.ssh/private_key.pem
+
+      - name: Add EC2 to Known Hosts
+        run: |
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Copy Project to EC2
+        run: |
+          scp -i ~/.ssh/private_key.pem -r . ubuntu@${{ secrets.EC2_HOST }}:~/myproject
+
+      - name: Deploy Docker on EC2
+        run: |
+          ssh -i ~/.ssh/private_key.pem ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            cd ~/myproject
+            sudo docker stop myproject || true
+            sudo docker rm myproject || true
+            sudo docker build -t myproject .
+            sudo docker run -d --restart unless-stopped -p 80:80 --name myproject myproject
+          EOF
