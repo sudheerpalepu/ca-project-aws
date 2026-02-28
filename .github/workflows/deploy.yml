@@ -1,4 +1,4 @@
-name: Deploy MyProject to EC2
+name: Deploy MyProject
 
 on:
   push:
@@ -10,30 +10,31 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.x'
-
-    - name: Install Ansible and dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install ansible boto3 docker
-
-    - name: Create SSH private key
+    - name: Setup SSH key
       run: |
         echo "${{ secrets.EC2_SSH_KEY_BASE64 }}" | base64 --decode > assignmentkey.pem
         chmod 400 assignmentkey.pem
 
     - name: Add EC2 to known hosts
       run: |
+        mkdir -p ~/.ssh
         ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-    - name: Run Ansible Playbook
+    - name: Clean remote folder
+      run: |
+        ssh -o StrictHostKeyChecking=no -i assignmentkey.pem \
+        ubuntu@${{ secrets.EC2_HOST }} \
+        "rm -rf ~/myproject && mkdir ~/myproject"
+
+    - name: Copy project files to EC2
+      run: |
+        scp -o StrictHostKeyChecking=no -i assignmentkey.pem -r \
+        index.html index.css script.js Dockerfile ansible terraformfiles \
+        ubuntu@${{ secrets.EC2_HOST }}:~/myproject
+
+    - name: Run Ansible playbook
       run: |
         ansible-playbook -i ansible/inventory.ini ansible/deploy.yml
-      env:
-        ANSIBLE_HOST_KEY_CHECKING: "False"
