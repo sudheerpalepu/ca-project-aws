@@ -3,37 +3,42 @@ name: Deploy MyProject to EC2
 on:
   push:
     branches:
-      - main
+      - main   # Trigger on push to main branch
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout the repo
-      - name: Checkout code
-        uses: actions/checkout@v3
+    # 1️⃣ Checkout repo
+    - name: Checkout repository
+      uses: actions/checkout@v3
 
-      # 2️⃣ Set up SSH key
-      - name: Setup SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_KEY_BASE64 }}" | base64 --decode > ~/.ssh/assignmentkey.pem
-          chmod 600 ~/.ssh/assignmentkey.pem
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+    # 2️⃣ Set up SSH key
+    - name: Setup SSH key
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.EC2_KEY_BASE64 }}" | base64 --decode > ~/.ssh/assignmentkey.pem
+        chmod 600 ~/.ssh/assignmentkey.pem
+        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      # 3️⃣ Sync project to EC2
-      - name: Rsync project to EC2
-        run: |
-          rsync -avz --delete -e "ssh -i ~/.ssh/assignmentkey.pem" ./myproject/ ubuntu@${{ secrets.EC2_HOST }}:~/myproject/
+    # 3️⃣ Sync project to EC2
+    - name: Sync project files to EC2
+      run: |
+        rsync -avz --delete -e "ssh -i ~/.ssh/assignmentkey.pem -o StrictHostKeyChecking=no" \
+          $GITHUB_WORKSPACE/myproject/ \
+          ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:~/myproject/
 
-      # 4️⃣ Build & run Docker on EC2
-      - name: Build and run Docker on EC2
-        run: |
-          ssh -i ~/.ssh/assignmentkey.pem ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
-            cd ~/myproject
-            sudo docker stop myapp || true
-            sudo docker rm myapp || true
-            sudo docker build -t myapp .
-            sudo docker run -d --name myapp -p 80:80 myapp
-          EOF
+    # 4️⃣ Build and run Docker on EC2
+    - name: Deploy Docker container
+      run: |
+        ssh -i ~/.ssh/assignmentkey.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+          cd ~/myproject
+          # Stop/remove old container
+          docker stop myapp || true
+          docker rm myapp || true
+          # Build new image
+          docker build -t myapp .
+          # Run container
+          docker run -d --name myapp -p 80:80 myapp
+        EOF
