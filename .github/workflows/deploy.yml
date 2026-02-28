@@ -13,27 +13,23 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # Install Ansible
       - name: Install Ansible
         run: |
           sudo apt update
           sudo apt install -y ansible
 
-      # Setup SSH Key (FIXES LIBCRYPTO ERROR)
       - name: Setup SSH Key
-  run: |
-    mkdir -p ~/.ssh
-    echo "${{ secrets.EC2_KEY_BASE64 }}" | base64 --decode > ~/.ssh/assignmentkey.pem
-    chmod 600 ~/.ssh/assignmentkey.pem
-    ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
-
-      # Create Ansible Inventory
-      - name: Create Inventory File
         run: |
-          echo "[web]" > inventory.ini
-          echo "${{ secrets.EC2_HOST }} ansible_user=${{ secrets.EC2_USER }} ansible_ssh_private_key_file=~/.ssh/assignmentkey.pem" >> inventory.ini
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_KEY_BASE64 }}" | base64 --decode > ~/.ssh/assignmentkey.pem
+          chmod 600 ~/.ssh/assignmentkey.pem
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      # Run Ansible Playbook
+      - name: Create Ansible Inventory
+        run: |
+          echo "[web]" > ansible/inventory.ini
+          echo "${{ secrets.EC2_HOST }} ansible_user=${{ secrets.EC2_USER }} ansible_ssh_private_key_file=~/.ssh/assignmentkey.pem" >> ansible/inventory.ini
+
       - name: Run Ansible Playbook
         run: |
           ansible-playbook -i ansible/inventory.ini ansible/deploy.yml
