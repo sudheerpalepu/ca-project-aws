@@ -1,21 +1,12 @@
 ---
 - name: Deploy MyProject on EC2
-  hosts: all
+  hosts: ec2
   become: yes
-  vars:
-    project_dir: ~/myproject
-    files_to_copy:
-      - index.html
-      - index.css
-      - script.js
-      - Dockerfile
 
   tasks:
-    - name: Ensure project directory exists
-      file:
-        path: "{{ project_dir }}"
-        state: directory
-        mode: '0755'
+    - name: Update apt cache
+      apt:
+        update_cache: yes
 
     - name: Install required packages
       apt:
@@ -24,8 +15,6 @@
       loop:
         - docker.io
         - python3-pip
-      become: yes
-      update_cache: yes
 
     - name: Add ubuntu user to docker group
       user:
@@ -35,22 +24,27 @@
 
     - name: Copy project files to EC2
       copy:
-        src: "{{ item }}"
-        dest: "{{ project_dir }}/{{ item }}"
-      loop: "{{ files_to_copy }}"
-      delegate_to: localhost
+        src: "{{ item.src }}"
+        dest: "{{ item.dest }}"
+        mode: '0644'
+      loop:
+        - { src: "index.html", dest: "~/myproject/index.html" }
+        - { src: "index.css", dest: "~/myproject/index.css" }
+        - { src: "script.js", dest: "~/myproject/script.js" }
+        - { src: "Dockerfile", dest: "~/myproject/Dockerfile" }
 
     - name: Build Docker image
-      docker_image:
-        path: "{{ project_dir }}"
+      community.docker.docker_image:
+        build:
+          path: ~/myproject
         name: myproject
         state: present
 
     - name: Run Docker container
-      docker_container:
+      community.docker.docker_container:
         name: myproject
         image: myproject
         state: started
         restart_policy: always
-        published_ports:
+        ports:
           - "80:80"
