@@ -21,19 +21,19 @@ jobs:
           echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/assignmentkey.pem
           chmod 600 ~/.ssh/assignmentkey.pem
 
-      # 3️⃣ Install Ansible & Docker collection
-      - name: Set up Ansible
+      # 3️⃣ Install Ansible & Docker collection (compatible version)
+      - name: Install Ansible
         run: |
           sudo apt update && sudo apt install -y python3-pip
-          pip3 install ansible==7.9.0
+          pip3 install "ansible<7.5"  # <=7.4 works with Python 3.14
           ansible-galaxy collection install community.docker
 
-      # 4️⃣ Verify EC2 connectivity
+      # 4️⃣ Test SSH connectivity
       - name: Test SSH connectivity
         run: |
           ssh -i ~/.ssh/assignmentkey.pem -o StrictHostKeyChecking=no ubuntu@44.211.243.198 "echo Connected!"
 
-      # 5️⃣ Run Ansible Playbook
-      - name: Deploy with Ansible
+      # 5️⃣ Deploy with Ansible
+      - name: Run Ansible Playbook
         run: |
           ansible-playbook -i ansible/inventory.ini ansible/deploy.yml -vvv
