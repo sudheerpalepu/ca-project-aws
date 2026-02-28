@@ -1,4 +1,4 @@
-name: Deploy MyProject on EC2
+name: Deploy Web App to EC2
 
 on:
   push:
@@ -11,29 +11,29 @@ jobs:
 
     steps:
       # 1️⃣ Checkout repository
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-      # 2️⃣ Install Ansible
-      - name: Install Ansible
-        run: |
-          sudo apt update
-          sudo apt install -y ansible
-
-      # 3️⃣ Setup SSH Key
-      - name: Setup SSH Key
+      # 2️⃣ Setup SSH key
+      - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_KEY_BASE64 }}" | base64 --decode > ~/.ssh/assignmentkey.pem
+          echo "${{ secrets.EC2_KEY }}" | tr -d '\r' > ~/.ssh/assignmentkey.pem
           chmod 600 ~/.ssh/assignmentkey.pem
           ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      # 4️⃣ Test SSH Connection
-      - name: Test SSH Connection
+      # 3️⃣ Create Ansible inventory
+      - name: Create inventory file
         run: |
-          ssh -i ~/.ssh/assignmentkey.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo Connected"
+          echo "[web]" > inventory.ini
+          echo "${{ secrets.EC2_HOST }} ansible_user=${{ secrets.EC2_USER }} ansible_ssh_private_key_file=~/.ssh/assignmentkey.pem" >> inventory.ini
 
-      # 5️⃣ Run Ansible Playbook
-      - name: Run Ansible Playbook
+      # 4️⃣ Install Ansible
+      - name: Install Ansible
         run: |
-          ansible-playbook -i ansible/inventory.ini ansible/deploy.yml
+          sudo apt update
+          sudo apt install -y ansible rsync
+
+      # 5️⃣ Run Ansible playbook
+      - name: Run Ansible Playbook
+        run: ansible-playbook -i inventory.ini ansible/deploy.yml

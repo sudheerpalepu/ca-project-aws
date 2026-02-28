@@ -8,22 +8,6 @@
     app_path: /home/ubuntu/myproject
 
   tasks:
-    # 0️⃣ Remove old Docker repos & keys
-    - name: Remove old Docker apt sources
-      file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /etc/apt/sources.list.d/docker.list
-        - /etc/apt/sources.list.d/docker.list.save
-        - /etc/apt/sources.list.d/docker-ce.list
-        - /etc/apt/sources.list.d/docker-ce.list.save
-
-    - name: Remove old Docker GPG key
-      file:
-        path: /usr/share/keyrings/docker-archive-keyring.gpg
-        state: absent
-
     # 1️⃣ Update apt cache
     - name: Update apt cache
       apt:
@@ -36,14 +20,7 @@
         dpkg --configure -a
         apt autoremove -y
 
-    # 3️⃣ Install Git
-    - name: Install Git
-      apt:
-        name: git
-        state: latest
-        update_cache: yes
-
-    # 4️⃣ Install prerequisites for Docker
+    # 3️⃣ Install prerequisites
     - name: Install prerequisites for Docker
       apt:
         name:
@@ -52,47 +29,47 @@
           - curl
           - gnupg
           - lsb-release
+          - rsync
         state: present
         update_cache: yes
 
-    # 5️⃣ Add Docker GPG key
+    # 4️⃣ Add Docker GPG key
     - name: Add Docker GPG key
       shell: |
         curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
       args:
         creates: /usr/share/keyrings/docker-archive-keyring.gpg
 
-    # 6️⃣ Add Docker repository for Ubuntu 24.04
+    # 5️⃣ Add Docker repository
     - name: Add Docker repository
       apt_repository:
         repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu noble stable"
         state: present
         filename: docker
 
-    # 7️⃣ Install Docker CE
+    # 6️⃣ Install Docker CE
     - name: Install Docker CE
       apt:
         name: docker-ce
         state: latest
         update_cache: yes
 
-    # 8️⃣ Ensure Docker is running
+    # 7️⃣ Ensure Docker is running
     - name: Ensure Docker is running
       service:
         name: docker
         state: started
         enabled: yes
 
-    # 9️⃣ Copy project files to EC2
+    # 8️⃣ Copy project files using synchronize
     - name: Copy project files
-      copy:
-        src: "{{ playbook_dir }}/../myproject/"
+      synchronize:
+        src: "../myproject/"
         dest: "{{ app_path }}"
-        owner: ubuntu
-        group: ubuntu
-        mode: '0755'
+        rsync_opts:
+          - "--chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r"
 
-    # 🔟 Build Docker image
+    # 9️⃣ Build Docker image
     - name: Build Docker image
       docker_image:
         build:
@@ -101,14 +78,14 @@
         tag: latest
         push: no
 
-    # 1️⃣1️⃣ Stop existing container if running
+    # 🔟 Stop existing container if running
     - name: Stop existing container
       docker_container:
         name: "{{ app_name }}"
         state: absent
         force_kill: yes
 
-    # 1️⃣2️⃣ Run Docker container
+    # 1️⃣1️⃣ Run Docker container
     - name: Run Docker container
       docker_container:
         name: "{{ app_name }}"
