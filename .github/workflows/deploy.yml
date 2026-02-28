@@ -10,42 +10,37 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout your repo
+      # 1️⃣ Checkout the repository
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # 2️⃣ Setup Python & Ansible
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
-      - name: Install Ansible
-        run: |
-          python -m pip install --upgrade pip
-          pip install ansible==7.9.0
-
-      # 3️⃣ Setup SSH key for EC2
+      # 2️⃣ Configure SSH key
       - name: Configure SSH key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_KEY_BASE64 }}" | base64 --decode > ~/.ssh/assignmentkey.pem
           chmod 600 ~/.ssh/assignmentkey.pem
-          # Disable strict host checking for ephemeral CI runner
           echo -e "Host *\n\tStrictHostKeyChecking no\n" >> ~/.ssh/config
 
-      # 4️⃣ Optional: Add EC2 host key (more secure alternative)
-      # - name: Add EC2 host to known_hosts
-      #   run: ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
-
-      # 5️⃣ Copy project files to EC2
-      - name: Copy project to EC2
+      # 3️⃣ Sync project files to EC2
+      - name: Sync project to EC2
         run: |
-          rsync -avz -e "ssh -i ~/.ssh/assignmentkey.pem -o StrictHostKeyChecking=no" ./myproject/ ubuntu@${{ secrets.EC2_HOST }}:~/myproject/
+          rsync -avz --delete -e "ssh -i ~/.ssh/assignmentkey.pem" ./myproject/ ubuntu@${{ secrets.EC2_HOST }}:~/myproject/
 
-      # 6️⃣ Run Ansible playbook
-      - name: Run Ansible playbook
-        env:
-          ANSIBLE_HOST_KEY_CHECKING: "False"
+      # 4️⃣ Build & Run Docker on EC2
+      - name: Build and run Docker on EC2
         run: |
-          ansible-playbook -i ansible/inventory.ini ansible/deploy.yml -vvv
+          ssh -i ~/.ssh/assignmentkey.pem ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+          cd ~/myproject
+          # Remove previous container if exists
+          docker rm -f myapp || true
+          # Build Docker image
+          docker build -t myapp .
+          # Run container
+          docker run -d --name myapp -p 80:80 myapp
+          EOF
+
+      # 5️⃣ Verify container is running
+      - name: Check container status
+        run: |
+          ssh -i ~/.ssh/assignmentkey.pem ubuntu@${{ secrets.EC2_HOST }} "docker ps"
