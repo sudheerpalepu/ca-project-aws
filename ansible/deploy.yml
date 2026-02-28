@@ -4,19 +4,18 @@
   become: true
 
   tasks:
-    # 1️⃣ Ensure apt cache is updated
+    # 1️⃣ Update apt cache
     - name: Update apt cache
       apt:
         update_cache: yes
 
-    # 2️⃣ Fix broken packages (important for fresh EC2)
+    # 2️⃣ Fix broken dependencies
     - name: Fix broken dependencies
       shell: |
-        sudo apt --fix-broken install -y
-        sudo dpkg --configure -a
-        sudo apt autoremove -y
-      args:
-        warn: false
+        apt --fix-broken install -y
+        dpkg --configure -a
+        apt autoremove -y
+      become: true
 
     # 3️⃣ Install Git
     - name: Install Git
@@ -25,7 +24,7 @@
         state: latest
         update_cache: yes
 
-    # 4️⃣ Install Docker (latest from Ubuntu repo)
+    # 4️⃣ Install Docker
     - name: Install Docker
       apt:
         name: docker.io
