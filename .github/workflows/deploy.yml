@@ -10,29 +10,31 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. Checkout code
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    # 2. Setup SSH key
-    - name: Setup SSH
+    - name: Set up SSH key
       run: |
-        mkdir -p ~/.ssh
-        echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
-        chmod 600 ~/.ssh/id_rsa
-        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+        echo "${{ secrets.EC2_SSH_KEY }}" > assignmentkey.pem
+        chmod 400 assignmentkey.pem
 
-    # 3. Clean remote folder
-    - name: Clean remote project folder
+    - name: Clean Remote Folder
       run: |
-        ssh ubuntu@${{ secrets.EC2_HOST }} "rm -rf ~/myproject && mkdir ~/myproject"
+        ssh -o StrictHostKeyChecking=no -i assignmentkey.pem \
+        ubuntu@${{ secrets.EC2_HOST }} \
+        "rm -rf ~/myproject && mkdir ~/myproject"
 
-    # 4. Copy project files to EC2
-    - name: Copy project files
+    - name: Copy Project Files to EC2
       run: |
-        scp -r ./ansible ./index.html ./index.css ./script.js ./Dockerfile ./terraformfiles ubuntu@${{ secrets.EC2_HOST }}:~/myproject
+        scp -o StrictHostKeyChecking=no -i assignmentkey.pem -r \
+        index.html index.css script.js Dockerfile ansible terraformfiles \
+        ubuntu@${{ secrets.EC2_HOST }}:~/myproject
 
-    # 5. Run Ansible playbook on EC2
-    - name: Run Ansible playbook
+    - name: Install Ansible on runner
+      run: sudo apt-get update && sudo apt-get install -y ansible
+
+    - name: Run Ansible Playbook
       run: |
-        ssh ubuntu@${{ secrets.EC2_HOST }} "ansible-playbook ~/myproject/ansible/deploy.yml -i ~/myproject/ansible/inventory.ini"
+        ssh -o StrictHostKeyChecking=no -i assignmentkey.pem \
+        ubuntu@${{ secrets.EC2_HOST }} \
+        "cd ~/myproject && ansible-playbook -i ansible/inventory.ini ansible/deploy.yml"

@@ -1,19 +1,31 @@
 ---
 - name: Deploy MyProject on EC2
   hosts: all
-  become: yes
+  become: true
+
   vars:
     project_dir: /home/ubuntu/myproject
+    docker_image_name: myproject_app
+    docker_container_name: myproject_container
 
   tasks:
+
+    - name: Update APT cache
+      apt:
+        update_cache: yes
+
     - name: Install required packages
       apt:
-        name: "{{ item }}"
+        name:
+          - docker.io
+          - python3-pip
         state: present
-        update_cache: yes
-      loop:
-        - docker.io
-        - python3-pip
+
+    - name: Ensure Docker service is running
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
 
     - name: Add ubuntu user to docker group
       user:
@@ -21,26 +33,39 @@
         groups: docker
         append: yes
 
-    - name: Copy project files to EC2
-      copy:
-        src: ../
-        dest: "{{ project_dir }}"
+    - name: Create project directory
+      file:
+        path: "{{ project_dir }}"
+        state: directory
         owner: ubuntu
         group: ubuntu
-        mode: 0755
+        mode: '0755'
+
+    - name: Copy project files to EC2
+      copy:
+        src: "{{ item }}"
+        dest: "{{ project_dir }}/"
+        owner: ubuntu
+        group: ubuntu
+        mode: '0644'
+      with_fileglob:
+        - "../index.html"
+        - "../index.css"
+        - "../script.js"
+        - "../Dockerfile"
+      delegate_to: localhost
 
     - name: Build Docker image
-      community.docker.docker_image:
-        name: myproject
-        source: build
-        build:
-          path: "{{ project_dir }}"
+      docker_image:
+        path: "{{ project_dir }}"
+        name: "{{ docker_image_name }}"
+        state: present
 
     - name: Run Docker container
-      community.docker.docker_container:
-        name: myproject
-        image: myproject
+      docker_container:
+        name: "{{ docker_container_name }}"
+        image: "{{ docker_image_name }}"
         state: started
-        restart_policy: unless-stopped
+        restart_policy: always
         ports:
           - "80:80"
