@@ -21,11 +21,11 @@ jobs:
 
       # Setup SSH Key (FIXES LIBCRYPTO ERROR)
       - name: Setup SSH Key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_KEY }}" | tr -d '\r' > ~/.ssh/assignmentkey.pem
-          chmod 600 ~/.ssh/assignmentkey.pem
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+  run: |
+    mkdir -p ~/.ssh
+    echo "${{ secrets.EC2_KEY_BASE64 }}" | base64 --decode > ~/.ssh/assignmentkey.pem
+    chmod 600 ~/.ssh/assignmentkey.pem
+    ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
       # Create Ansible Inventory
       - name: Create Inventory File
