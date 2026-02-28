@@ -2,47 +2,67 @@
 - name: Deploy MyProject Web App on EC2
   hosts: web
   become: true
+  vars:
+    project_path: "~/myproject"
+    docker_image_name: "myapp"
+    docker_container_name: "myapp"
+    expose_port: 80
 
   tasks:
-    # 1️⃣ Update apt cache
-    - name: Update apt cache
+    # 1️⃣ Install Docker if not present
+    - name: Ensure Docker is installed
       apt:
+        name: docker.io
+        state: present
         update_cache: yes
 
-    # 2️⃣ Install Docker using official convenience script
-    - name: Install Docker
-      shell: curl -fsSL https://get.docker.com | sh
-      args:
-        warn: false
+    - name: Ensure python3-pip is installed (for Ansible modules)
+      apt:
+        name: python3-pip
+        state: present
 
-    # 3️⃣ Ensure Docker service is running
-    - name: Start Docker
-      service:
+    - name: Ensure Docker Python module is installed
+      pip:
         name: docker
-        state: started
-        enabled: true
+        state: present
 
-    # 4️⃣ Build Docker image
+    # 2️⃣ Copy project files to EC2
+    - name: Copy project files
+      synchronize:
+        src: "{{ project_path }}/"
+        dest: "{{ project_path }}/"
+        recursive: yes
+        delete: yes
+      delegate_to: localhost
+
+    # 3️⃣ Build Docker image
     - name: Build Docker image
-      docker_image:
+      community.docker.docker_image:
+        name: "{{ docker_image_name }}"
+        source: build
         build:
-          path: ~/myproject
-        name: myapp
-        tag: latest
+          path: "{{ project_path }}"
 
-    # 5️⃣ Stop and remove any running container
-    - name: Stop old container
-      docker_container:
-        name: myapp
+    # 4️⃣ Stop existing container (ignore errors if not running)
+    - name: Stop existing container
+      community.docker.docker_container:
+        name: "{{ docker_container_name }}"
+        state: stopped
+      ignore_errors: yes
+
+    # 5️⃣ Remove existing container (ignore errors if not present)
+    - name: Remove existing container
+      community.docker.docker_container:
+        name: "{{ docker_container_name }}"
         state: absent
-        force_kill: yes
+      ignore_errors: yes
 
     # 6️⃣ Run new container
-    - name: Run container
-      docker_container:
-        name: myapp
-        image: myapp:latest
+    - name: Run new container
+      community.docker.docker_container:
+        name: "{{ docker_container_name }}"
+        image: "{{ docker_image_name }}"
         state: started
         restart_policy: always
         ports:
-          - "80:80"
+          - "{{ expose_port }}:80"
