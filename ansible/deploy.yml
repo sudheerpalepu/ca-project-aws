@@ -4,6 +4,8 @@
   become: yes
   vars:
     project_dir: /home/ubuntu/myproject
+    docker_image: myapp
+    docker_container: myapp
     files_to_copy:
       - { src: '../index.html', dest: '{{ project_dir }}/index.html' }
       - { src: '../index.css', dest: '{{ project_dir }}/index.css' }
@@ -11,7 +13,6 @@
       - { src: '../Dockerfile', dest: '{{ project_dir }}/Dockerfile' }
 
   tasks:
-
     - name: Ensure project directory exists
       ansible.builtin.file:
         path: "{{ project_dir }}"
@@ -38,8 +39,20 @@
         dest: "{{ item.dest }}"
       loop: "{{ files_to_copy }}"
 
-    - name: Stop old container if exists
+    - name: Stop old Docker container if exists
       ansible.builtin.shell: |
-        if [ $(docker ps -aq -f name=myapp) ]; then
-          docker rm -f myapp
-       
+        if [ $(docker ps -aq -f name={{ docker_container }}) ]; then
+          docker rm -f {{ docker_container }}
+        fi
+      ignore_errors: yes
+
+    - name: Build Docker image (force rebuild)
+      ansible.builtin.shell: |
+        docker build --no-cache -t {{ docker_image }} "{{ project_dir }}"
+      args:
+        chdir: "{{ project_dir }}"
+
+    - name: Run Docker container
+      ansible.builtin.shell: |
+        docker run -d -p 80:80 --name {{ docker_container }} {{ docker_image }}
+      ignore_errors: yes
