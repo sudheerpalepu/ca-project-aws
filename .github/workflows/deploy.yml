@@ -1,4 +1,4 @@
-name: Deploy MyProject to EC2
+name: Deploy MyProject
 
 on:
   push:
@@ -15,26 +15,24 @@ jobs:
 
     - name: Set up SSH key
       run: |
-        echo "${{ secrets.EC2_SSH_KEY }}" > assignmentkey.pem
-        chmod 400 assignmentkey.pem
+        echo "${{ secrets.EC2_SSH_KEY }}" > private_key.pem
+        chmod 400 private_key.pem
 
-    - name: Clean Remote Folder
+    - name: Clean remote folder
       run: |
-        ssh -o StrictHostKeyChecking=no -i assignmentkey.pem \
-        ubuntu@${{ secrets.EC2_HOST }} \
+        ssh -o StrictHostKeyChecking=no -i private_key.pem ubuntu@${{ secrets.EC2_HOST }} \
         "rm -rf ~/myproject && mkdir ~/myproject"
 
-    - name: Copy Project Files to EC2
+    - name: Copy project files to EC2
       run: |
-        scp -o StrictHostKeyChecking=no -i assignmentkey.pem -r \
-        index.html index.css script.js Dockerfile ansible terraformfiles \
-        ubuntu@${{ secrets.EC2_HOST }}:~/myproject
+        rsync -avz -e "ssh -o StrictHostKeyChecking=no -i private_key.pem" \
+        --exclude='.git' ./ ubuntu@${{ secrets.EC2_HOST }}:~/myproject
 
     - name: Install Ansible on runner
-      run: sudo apt-get update && sudo apt-get install -y ansible
+      run: |
+        sudo apt update
+        sudo apt install -y ansible
 
     - name: Run Ansible Playbook
       run: |
-        ssh -o StrictHostKeyChecking=no -i assignmentkey.pem \
-        ubuntu@${{ secrets.EC2_HOST }} \
-        "cd ~/myproject && ansible-playbook -i ansible/inventory.ini ansible/deploy.yml"
+        ansible-playbook -i ansible/inventory.ini ansible/deploy.yml
