@@ -8,6 +8,22 @@
     app_path: /home/ubuntu/myproject
 
   tasks:
+    # 0️⃣ Remove old Docker repos & keys
+    - name: Remove old Docker apt sources
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/apt/sources.list.d/docker.list
+        - /etc/apt/sources.list.d/docker.list.save
+        - /etc/apt/sources.list.d/docker-ce.list
+        - /etc/apt/sources.list.d/docker-ce.list.save
+
+    - name: Remove old Docker GPG key
+      file:
+        path: /usr/share/keyrings/docker-archive-keyring.gpg
+        state: absent
+
     # 1️⃣ Update apt cache
     - name: Update apt cache
       apt:
@@ -19,7 +35,6 @@
         apt --fix-broken install -y
         dpkg --configure -a
         apt autoremove -y
-      become: true
 
     # 3️⃣ Install Git
     - name: Install Git
@@ -28,14 +43,7 @@
         state: latest
         update_cache: yes
 
-    # 4️⃣ Remove old docker.io (if any)
-    - name: Remove old Docker
-      apt:
-        name: docker.io
-        state: absent
-        purge: yes
-
-    # 5️⃣ Install Docker CE (official repo)
+    # 4️⃣ Install prerequisites for Docker
     - name: Install prerequisites for Docker
       apt:
         name:
@@ -47,31 +55,35 @@
         state: present
         update_cache: yes
 
-    - name: Add Docker GPG key to keyring
+    # 5️⃣ Add Docker GPG key
+    - name: Add Docker GPG key
       ansible.builtin.get_url:
         url: https://download.docker.com/linux/ubuntu/gpg
         dest: /usr/share/keyrings/docker-archive-keyring.gpg
         mode: '0644'
 
+    # 6️⃣ Add Docker repository
     - name: Add Docker repository
       ansible.builtin.apt_repository:
         repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu {{ ansible_facts['distribution_release'] }} stable"
         state: present
         filename: docker
 
+    # 7️⃣ Install Docker CE
     - name: Install Docker CE
       apt:
         name: docker-ce
         state: latest
         update_cache: yes
 
+    # 8️⃣ Ensure Docker is running
     - name: Ensure Docker is running
       service:
         name: docker
         state: started
         enabled: yes
 
-    # 6️⃣ Copy project files to EC2
+    # 9️⃣ Copy project files to EC2
     - name: Copy project files
       copy:
         src: ../myproject/
@@ -80,7 +92,7 @@
         group: ubuntu
         mode: '0755'
 
-    # 7️⃣ Build Docker image
+    # 🔟 Build Docker image
     - name: Build Docker image
       docker_image:
         build:
@@ -89,14 +101,14 @@
         tag: latest
         push: no
 
-    # 8️⃣ Stop existing container if running
+    # 1️⃣1️⃣ Stop existing container if running
     - name: Stop existing container
       docker_container:
         name: "{{ app_name }}"
         state: absent
         force_kill: yes
 
-    # 9️⃣ Run Docker container
+    # 1️⃣2️⃣ Run Docker container
     - name: Run Docker container
       docker_container:
         name: "{{ app_name }}"
