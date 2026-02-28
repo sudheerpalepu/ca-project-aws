@@ -1,4 +1,4 @@
-name: Deploy to EC2
+name: Deploy MyProject to EC2
 
 on:
   push:
@@ -10,28 +10,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v4
+    # 1. Checkout code
+    - name: Checkout repository
+      uses: actions/checkout@v3
 
-      - name: Create SSH Key
-        run: |
-          echo "${{ secrets.EC2_SSH_KEY_BASE64 }}" | base64 -d > private_key.pem
-          chmod 400 private_key.pem
+    # 2. Setup SSH key
+    - name: Setup SSH
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+        chmod 600 ~/.ssh/id_rsa
+        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Clean Remote Folder
-        run: |
-          ssh -o StrictHostKeyChecking=no -i private_key.pem ubuntu@${{ secrets.EC2_HOST }} "rm -rf ~/myproject && mkdir ~/myproject"
+    # 3. Clean remote folder
+    - name: Clean remote project folder
+      run: |
+        ssh ubuntu@${{ secrets.EC2_HOST }} "rm -rf ~/myproject && mkdir ~/myproject"
 
-      - name: Copy Project Files
-        run: |
-          scp -o StrictHostKeyChecking=no -i private_key.pem -r index.html index.css script.js Dockerfile ansible terraformfiles ubuntu@${{ secrets.EC2_HOST }}:~/myproject
+    # 4. Copy project files to EC2
+    - name: Copy project files
+      run: |
+        scp -r ./ansible ./index.html ./index.css ./script.js ./Dockerfile ./terraformfiles ubuntu@${{ secrets.EC2_HOST }}:~/myproject
 
-      - name: Deploy Docker Container
-        run: |
-          ssh -o StrictHostKeyChecking=no -i private_key.pem ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
-            cd ~/myproject
-            sudo docker stop mycontainer || true
-            sudo docker rm mycontainer || true
-            sudo docker build -t myapp .
-            sudo docker run -d -p 80:80 --name mycontainer myapp
-          EOF
+    # 5. Run Ansible playbook on EC2
+    - name: Run Ansible playbook
+      run: |
+        ssh ubuntu@${{ secrets.EC2_HOST }} "ansible-playbook ~/myproject/ansible/deploy.yml -i ~/myproject/ansible/inventory.ini"
