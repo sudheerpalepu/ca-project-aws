@@ -4,19 +4,20 @@
   become: true
 
   tasks:
-    - name: Update apt
+    - name: Update apt cache
       apt:
         update_cache: yes
 
     - name: Install Git
       apt:
         name: git
-        state: present
+        state: latest
 
-    - name: Install Docker
+    - name: Install Docker (latest)
       apt:
         name: docker.io
-        state: present
+        state: latest
+        update_cache: yes
 
     - name: Start Docker
       service:
