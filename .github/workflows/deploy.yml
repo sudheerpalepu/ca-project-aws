@@ -7,26 +7,56 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    steps:
 
-      - name: Checkout repo
+    steps:
+      # 1️⃣ Checkout repo
+      - name: Checkout code
         uses: actions/checkout@v3
 
+      # 2️⃣ Setup Python and Ansible
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.11"
 
-      - name: Install Ansible & dependencies
+      - name: Install Ansible and Docker collection
         run: |
           python -m pip install --upgrade pip
           pip install ansible==7.4.0
           ansible-galaxy collection install community.docker
 
+      # 3️⃣ Setup SSH key
+      - name: Configure SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "$EC2_SSH_KEY" > ~/.ssh/assignmentkey.pem
+          chmod 600 ~/.ssh/assignmentkey.pem
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+
+      # 4️⃣ Copy project files to EC2
       - name: Copy project to EC2
         run: |
-          rsync -avz --delete -e "ssh -i $HOME/ca-project-aws/assignmentkey.pem -o StrictHostKeyChecking=no" ./myproject/ ubuntu@44.211.243.198:~/myproject/
+          rsync -avz --delete -e "ssh -i ~/.ssh/assignmentkey.pem -o StrictHostKeyChecking=no" ./myproject/ ubuntu@44.211.243.198:~/myproject/
 
+      # 5️⃣ Stop & remove old Docker container (if exists)
+      - name: Cleanup old Docker container
+        run: |
+          ssh -i ~/.ssh/assignmentkey.pem -o StrictHostKeyChecking=no ubuntu@44.211.243.198 << 'EOF'
+            docker stop myapp || true
+            docker rm myapp || true
+          EOF
+
+      # 6️⃣ Build new Docker image and run
+      - name: Build and run Docker container
+        run: |
+          ssh -i ~/.ssh/assignmentkey.pem -o StrictHostKeyChecking=no ubuntu@44.211.243.198 << 'EOF'
+            cd ~/myproject
+            docker build -t myapp .
+            docker run -d --name myapp -p 80:80 myapp
+          EOF
+
+      # 7️⃣ Optional: Run Ansible playbook for any additional setup
       - name: Run Ansible deploy
         run: |
           ansible-playbook -i ansible/inventory.ini ansible/deploy.yml -vv
