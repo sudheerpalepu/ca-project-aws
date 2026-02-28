@@ -1,39 +1,32 @@
-name: CI/CD Docker Deploy
+name: Deploy MyProject
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      # 1️⃣ Checkout code
-      - name: Checkout Repository
+
+      - name: Checkout repo
         uses: actions/checkout@v3
 
-      # 2️⃣ Set up SSH key
-      - name: Set up SSH key
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/assignmentkey.pem
-          chmod 600 ~/.ssh/assignmentkey.pem
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
 
-      # 3️⃣ Install Ansible & Docker collection (compatible version)
-      - name: Install Ansible
+      - name: Install Ansible & dependencies
         run: |
-          sudo apt update && sudo apt install -y python3-pip
-          pip3 install "ansible<7.5"  # <=7.4 works with Python 3.14
+          python -m pip install --upgrade pip
+          pip install ansible==7.4.0
           ansible-galaxy collection install community.docker
 
-      # 4️⃣ Test SSH connectivity
-      - name: Test SSH connectivity
+      - name: Copy project to EC2
         run: |
-          ssh -i ~/.ssh/assignmentkey.pem -o StrictHostKeyChecking=no ubuntu@44.211.243.198 "echo Connected!"
+          rsync -avz --delete -e "ssh -i $HOME/ca-project-aws/assignmentkey.pem -o StrictHostKeyChecking=no" ./myproject/ ubuntu@44.211.243.198:~/myproject/
 
-      # 5️⃣ Deploy with Ansible
-      - name: Run Ansible Playbook
+      - name: Run Ansible deploy
         run: |
-          ansible-playbook -i ansible/inventory.ini ansible/deploy.yml -vvv
+          ansible-playbook -i ansible/inventory.ini ansible/deploy.yml -vv

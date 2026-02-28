@@ -1,58 +1,33 @@
-# ansible/deploy.yml
 - name: Deploy MyProject Web App on EC2
-  hosts: all
+  hosts: web
   become: yes
-  vars:
-    project_dir: /home/ubuntu/myproject
-    docker_image: myapp
-    docker_container: myapp
-    app_port: 80
-
+  collections:
+    - community.docker
   tasks:
 
-  - name: Ensure required packages are installed
-    apt:
-      name:
-        - docker.io
-        - python3-pip
-      state: present
-      update_cache: yes
+    - name: Ensure Docker is installed
+      apt:
+        name: docker.io
+        state: present
+        update_cache: yes
 
-  - name: Install Docker Python module
-    pip:
-      name: docker
-      executable: pip3
+    - name: Build Docker image
+      docker_image:
+        name: myapp
+        build:
+          path: ~/myproject
+        state: present
 
-  - name: Ensure Docker service is running
-    service:
-      name: docker
-      state: started
-      enabled: yes
+    - name: Stop old container if exists
+      docker_container:
+        name: myapp
+        state: absent
+        force_kill: yes
 
-  - name: Stop existing container if running
-    community.docker.docker_container:
-      name: "{{ docker_container }}"
-      state: absent
-      force_kill: yes
-
-  - name: Remove old dangling images
-    community.docker.docker_image:
-      name: "{{ docker_image }}"
-      state: absent
-      force: yes
-
-  - name: Build Docker image
-    community.docker.docker_image:
-      name: "{{ docker_image }}"
-      build:
-        path: "{{ project_dir }}"
-        rm: yes
-
-  - name: Run Docker container
-    community.docker.docker_container:
-      name: "{{ docker_container }}"
-      image: "{{ docker_image }}"
-      state: started
-      restart_policy: always
-      ports:
-        - "{{ app_port }}:80"
+    - name: Run new container
+      docker_container:
+        name: myapp
+        image: myapp
+        state: started
+        ports:
+          - "80:80"
