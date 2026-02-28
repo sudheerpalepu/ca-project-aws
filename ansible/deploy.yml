@@ -2,95 +2,62 @@
 - name: Deploy MyProject Web App on EC2
   hosts: web
   become: true
-
-  vars:
-    app_name: mywebapp
-    app_path: /home/ubuntu/myproject
-
   tasks:
-    # 1️⃣ Update apt cache
+
     - name: Update apt cache
-      apt:
+      ansible.builtin.apt:
         update_cache: yes
 
-    # 2️⃣ Fix broken dependencies
-    - name: Fix broken dependencies
-      shell: |
-        apt --fix-broken install -y
-        dpkg --configure -a
-        apt autoremove -y
-
-    # 3️⃣ Install prerequisites
-    - name: Install prerequisites for Docker
-      apt:
+    - name: Install required packages
+      ansible.builtin.apt:
         name:
           - apt-transport-https
           - ca-certificates
           - curl
           - gnupg
           - lsb-release
-          - rsync
         state: present
-        update_cache: yes
 
-    # 4️⃣ Add Docker GPG key
     - name: Add Docker GPG key
-      shell: |
-        curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-      args:
-        creates: /usr/share/keyrings/docker-archive-keyring.gpg
-
-    # 5️⃣ Add Docker repository
-    - name: Add Docker repository
-      apt_repository:
-        repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu noble stable"
+      ansible.builtin.apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
         state: present
-        filename: docker
 
-    # 6️⃣ Install Docker CE
-    - name: Install Docker CE
-      apt:
-        name: docker-ce
+    - name: Add Docker repository
+      ansible.builtin.apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Install Docker packages
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
         state: latest
         update_cache: yes
 
-    # 7️⃣ Ensure Docker is running
-    - name: Ensure Docker is running
-      service:
+    - name: Ensure Docker service is running
+      ansible.builtin.service:
         name: docker
         state: started
-        enabled: yes
+        enabled: true
 
-    # 8️⃣ Copy project files using synchronize
-    - name: Copy project files
-      synchronize:
-        src: "../myproject/"
-        dest: "{{ app_path }}"
-        rsync_opts:
-          - "--chmod=Du=rwx,Dgo=rx,Fu=rw,Fgo=r"
+    - name: Copy project files to EC2
+      ansible.builtin.copy:
+        src: ../myproject/
+        dest: ~/myproject/
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+        remote_src: no
 
-    # 9️⃣ Build Docker image
-    - name: Build Docker image
-      docker_image:
-        build:
-          path: "{{ app_path }}"
-        name: "{{ app_name }}"
-        tag: latest
-        push: no
-
-    # 🔟 Stop existing container if running
-    - name: Stop existing container
-      docker_container:
-        name: "{{ app_name }}"
-        state: absent
-        force_kill: yes
-
-    # 1️⃣1️⃣ Run Docker container
-    - name: Run Docker container
-      docker_container:
-        name: "{{ app_name }}"
-        image: "{{ app_name }}:latest"
-        state: started
-        restart_policy: always
-        ports:
-          - "80:80"
+    - name: Build and run Docker container
+      ansible.builtin.shell: |
+        cd ~/myproject
+        docker stop myapp || true
+        docker rm myapp || true
+        docker build -t myapp .
+        docker run -d --name myapp -p 80:80 myapp
+      args:
+        executable: /bin/bash
