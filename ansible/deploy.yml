@@ -39,7 +39,7 @@
         dest: "{{ item.dest }}"
       loop: "{{ files_to_copy }}"
 
-    - name: Stop old Docker container if exists
+    - name: Stop and remove old Docker container if exists
       ansible.builtin.shell: |
         if [ $(docker ps -aq -f name={{ docker_container }}) ]; then
           docker rm -f {{ docker_container }}
