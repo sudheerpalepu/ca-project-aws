@@ -86,7 +86,7 @@
     # 9️⃣ Copy project files to EC2
     - name: Copy project files
       copy:
-        src: ../myproject/
+        src: "{{ playbook_dir }}/../myproject/"
         dest: "{{ app_path }}"
         owner: ubuntu
         group: ubuntu
