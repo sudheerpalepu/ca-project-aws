@@ -38,10 +38,8 @@
         dest: "{{ item.dest }}"
       loop: "{{ files_to_copy }}"
 
-    - name: Build Docker image
-      ansible.builtin.shell: docker build -t myapp "{{ project_dir }}"
-      args:
-        chdir: "{{ project_dir }}"
-
-    - name: Run Docker container
-      ansible.builtin.shell: docker run -d -p 80:80 --name myapp myapp
+    - name: Stop old container if exists
+      ansible.builtin.shell: |
+        if [ $(docker ps -aq -f name=myapp) ]; then
+          docker rm -f myapp
+       
