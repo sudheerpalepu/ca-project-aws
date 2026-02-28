@@ -1,4 +1,4 @@
-name: Deploy MyProject
+name: Deploy MyProject to EC2
 
 on:
   push:
@@ -10,31 +10,58 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repo
+      # Step 1: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Set up SSH key
+      # Step 2: Set up SSH key
+      - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/assignmentkey.pem
+          echo "${{ secrets.EC2_SSH_KEY_BASE64 }}" | base64 --decode > ~/.ssh/assignmentkey.pem
           chmod 400 ~/.ssh/assignmentkey.pem
 
+      # Step 3: Add EC2 host to known_hosts
       - name: Add EC2 to known_hosts
-        run: ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Install Ansible & Docker safely
+      # Step 4: Install dependencies for Ansible
+      - name: Install Ansible & Python
         run: |
           sudo apt-get update
-          sudo apt-get remove -y docker docker-engine docker.io containerd runc || true
-          sudo apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
-          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
-          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
-          sudo apt-get update
-          sudo apt-get install -y docker-ce docker-ce-cli containerd.io
-          sudo apt-get install -y python3-pip
-          pip3 install --upgrade ansible
+          sudo apt-get install -y python3 python3-pip sshpass
+          pip3 install --upgrade pip
+          pip3 install ansible
 
+      # Step 5: Install Docker safely on EC2
+      - name: Install Docker on EC2
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/assignmentkey.pem ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            sudo apt-get remove -y docker docker-engine docker.io containerd runc || true
+            sudo apt-get update
+            sudo apt-get install -y apt-transport-https ca-certificates curl gnupg lsb-release
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+            echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+            sudo apt-get update
+            sudo apt-get install -y docker-ce docker-ce-cli containerd.io
+            sudo usermod -aG docker ubuntu
+          EOF
+
+      # Step 6: Prepare remote folder
+      - name: Clean and create remote folder
+        run: |
+          ssh -o StrictHostKeyChecking=no -i ~/.ssh/assignmentkey.pem ubuntu@${{ secrets.EC2_HOST }} \
+            "rm -rf ~/myproject && mkdir -p ~/myproject"
+
+      # Step 7: Copy project files to EC2
+      - name: Copy project files
+        run: |
+          rsync -avz -e "ssh -o StrictHostKeyChecking=no -i ~/.ssh/assignmentkey.pem" \
+            --exclude='.git' ./ ubuntu@${{ secrets.EC2_HOST }}:~/myproject
+
+      # Step 8: Run Ansible playbook
       - name: Run Ansible Playbook
         run: |
-          ansible-playbook -i ansible/inventory.ini ansible/deploy.yml \
-            --ssh-extra-args="-o StrictHostKeyChecking=no -i ~/.ssh/assignmentkey.pem"
+          ansible-playbook -i ansible/inventory.ini ansible/deploy.yml --private-key ~/.ssh/assignmentkey.pem
