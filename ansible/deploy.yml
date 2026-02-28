@@ -1,7 +1,11 @@
 ---
-- name: Deploy MyProject on EC2
+- name: Deploy MyProject Web App on EC2
   hosts: web
   become: true
+
+  vars:
+    app_name: mywebapp
+    app_path: /home/ubuntu/myproject
 
   tasks:
     # 1️⃣ Update apt cache
@@ -24,16 +28,78 @@
         state: latest
         update_cache: yes
 
-    # 4️⃣ Install Docker
-    - name: Install Docker
+    # 4️⃣ Remove old docker.io
+    - name: Remove old Docker
       apt:
         name: docker.io
+        state: absent
+        purge: yes
+
+    # 5️⃣ Install Docker CE from official repo
+    - name: Install prerequisites for Docker
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+        update_cache: yes
+
+    - name: Add Docker GPG key
+      ansible.builtin.apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      ansible.builtin.apt_repository:
+        repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable
+        state: present
+
+    - name: Install Docker CE
+      apt:
+        name: docker-ce
         state: latest
         update_cache: yes
 
-    # 5️⃣ Start and enable Docker service
     - name: Ensure Docker is running
       service:
         name: docker
         state: started
         enabled: yes
+
+    # 6️⃣ Copy project files to EC2
+    - name: Copy project files
+      copy:
+        src: ../myproject/
+        dest: "{{ app_path }}"
+        owner: ubuntu
+        group: ubuntu
+        mode: '0755'
+
+    # 7️⃣ Build Docker image
+    - name: Build Docker image
+      docker_image:
+        build:
+          path: "{{ app_path }}"
+        name: "{{ app_name }}"
+        tag: latest
+        push: no
+
+    # 8️⃣ Stop existing container if running
+    - name: Stop existing container
+      docker_container:
+        name: "{{ app_name }}"
+        state: absent
+        force_kill: yes
+
+    # 9️⃣ Run container
+    - name: Run Docker container
+      docker_container:
+        name: "{{ app_name }}"
+        image: "{{ app_name }}:latest"
+        state: started
+        restart_policy: always
+        ports:
+          - "80:80"
