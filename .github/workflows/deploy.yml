@@ -1,4 +1,4 @@
-name: Deploy to EC2
+name: Deploy MyProject on EC2
 
 on:
   push:
@@ -10,23 +10,30 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.x'
+      # Install Ansible
+      - name: Install Ansible
+        run: |
+          sudo apt update
+          sudo apt install -y ansible
 
-    - name: Install Ansible
-      run: pip install ansible
+      # Setup SSH Key (FIXES LIBCRYPTO ERROR)
+      - name: Setup SSH Key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_KEY }}" | tr -d '\r' > ~/.ssh/assignmentkey.pem
+          chmod 600 ~/.ssh/assignmentkey.pem
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-    - name: Set up SSH key
-      run: |
-        mkdir -p ~/.ssh
-        echo "${{ secrets.EC2_SSH_KEY_BASE64 }}" | base64 -d > ~/.ssh/assignmentkey.pem
-        chmod 400 ~/.ssh/assignmentkey.pem
-        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+      # Create Ansible Inventory
+      - name: Create Inventory File
+        run: |
+          echo "[web]" > inventory.ini
+          echo "${{ secrets.EC2_HOST }} ansible_user=${{ secrets.EC2_USER }} ansible_ssh_private_key_file=~/.ssh/assignmentkey.pem" >> inventory.ini
 
-    - name: Run Ansible Playbook
-      run: ansible-playbook -i ansible/inventory.ini ansible/deploy.yml --private-key ~/.ssh/assignmentkey.pem
+      # Run Ansible Playbook
+      - name: Run Ansible Playbook
+        run: |
+          ansible-playbook -i inventory.ini deploy.yml

@@ -1,58 +1,25 @@
 ---
 - name: Deploy MyProject on EC2
-  hosts: all
-  become: yes
-  vars:
-    project_dir: /home/ubuntu/myproject
-    docker_image: myapp
-    docker_container: myapp
-    files_to_copy:
-      - { src: '../index.html', dest: '{{ project_dir }}/index.html' }
-      - { src: '../index.css', dest: '{{ project_dir }}/index.css' }
-      - { src: '../script.js', dest: '{{ project_dir }}/script.js' }
-      - { src: '../Dockerfile', dest: '{{ project_dir }}/Dockerfile' }
+  hosts: web
+  become: true
 
   tasks:
-    - name: Ensure project directory exists
-      ansible.builtin.file:
-        path: "{{ project_dir }}"
-        state: directory
-        mode: '0755'
-
-    - name: Install required packages
-      ansible.builtin.apt:
-        name:
-          - python3-pip
-          - docker.io
+    - name: Update apt
+      apt:
         update_cache: yes
+
+    - name: Install Git
+      apt:
+        name: git
         state: present
 
-    - name: Add ubuntu user to docker group
-      ansible.builtin.user:
-        name: ubuntu
-        groups: docker
-        append: yes
+    - name: Install Docker
+      apt:
+        name: docker.io
+        state: present
 
-    - name: Copy project files to EC2
-      ansible.builtin.copy:
-        src: "{{ item.src }}"
-        dest: "{{ item.dest }}"
-      loop: "{{ files_to_copy }}"
-
-    - name: Stop and remove old Docker container if exists
-      ansible.builtin.shell: |
-        if [ $(docker ps -aq -f name={{ docker_container }}) ]; then
-          docker rm -f {{ docker_container }}
-        fi
-      ignore_errors: yes
-
-    - name: Build Docker image (force rebuild)
-      ansible.builtin.shell: |
-        docker build --no-cache -t {{ docker_image }} "{{ project_dir }}"
-      args:
-        chdir: "{{ project_dir }}"
-
-    - name: Run Docker container
-      ansible.builtin.shell: |
-        docker run -d -p 80:80 --name {{ docker_container }} {{ docker_image }}
-      ignore_errors: yes
+    - name: Start Docker
+      service:
+        name: docker
+        state: started
+        enabled: yes
