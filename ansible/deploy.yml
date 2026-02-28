@@ -1,16 +1,15 @@
 ---
 - name: Deploy MyProject on EC2
   hosts: all
-  become: true
-
+  become: yes
   vars:
-    project_dir: /home/ubuntu/myproject
-    docker_image_name: myproject_app
+    project_path: /home/ubuntu/myproject
+    docker_image_name: myproject
     docker_container_name: myproject_container
 
   tasks:
 
-    - name: Update APT cache
+    - name: Update apt cache
       apt:
         update_cache: yes
 
@@ -21,43 +20,37 @@
           - python3-pip
         state: present
 
-    - name: Ensure Docker service is running
-      systemd:
-        name: docker
-        state: started
-        enabled: yes
-
     - name: Add ubuntu user to docker group
       user:
         name: ubuntu
         groups: docker
         append: yes
 
-    - name: Create project directory
+    - name: Ensure project directory exists
       file:
-        path: "{{ project_dir }}"
+        path: "{{ project_path }}"
         state: directory
         owner: ubuntu
         group: ubuntu
-        mode: '0755'
+        mode: 0755
 
-    - name: Copy project files to EC2
+    - name: Copy project files
       copy:
         src: "{{ item }}"
-        dest: "{{ project_dir }}/"
+        dest: "{{ project_path }}/"
         owner: ubuntu
         group: ubuntu
-        mode: '0644'
+        mode: 0644
       with_fileglob:
         - "../index.html"
         - "../index.css"
         - "../script.js"
         - "../Dockerfile"
-      delegate_to: localhost
 
     - name: Build Docker image
       docker_image:
-        path: "{{ project_dir }}"
+        build:
+          path: "{{ project_path }}"
         name: "{{ docker_image_name }}"
         state: present
 
