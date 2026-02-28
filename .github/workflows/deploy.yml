@@ -10,33 +10,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-    - name: Create SSH Key
-  run: |
-    echo "${{ secrets.EC2_SSH_KEY_BASE64 }}" | base64 -d > private_key.pem
-    chmod 400 private_key.pem
+      - name: Create SSH Key
+        run: |
+          echo "${{ secrets.EC2_SSH_KEY_BASE64 }}" | base64 -d > private_key.pem
+          chmod 400 private_key.pem
 
-    - name: Clean Remote Folder
-      run: |
-        ssh -o StrictHostKeyChecking=no -i private_key.pem \
-        ubuntu@${{ secrets.EC2_HOST }} \
-        "rm -rf ~/myproject && mkdir ~/myproject"
+      - name: Clean Remote Folder
+        run: |
+          ssh -o StrictHostKeyChecking=no -i private_key.pem ubuntu@${{ secrets.EC2_HOST }} "rm -rf ~/myproject && mkdir ~/myproject"
 
-    - name: Copy Project Files to EC2
-      run: |
-        scp -o StrictHostKeyChecking=no -i private_key.pem -r \
-        index.html index.css script.js Dockerfile ansible terraformfiles \
-        ubuntu@${{ secrets.EC2_HOST }}:~/myproject
+      - name: Copy Project Files
+        run: |
+          scp -o StrictHostKeyChecking=no -i private_key.pem -r index.html index.css script.js Dockerfile ansible terraformfiles ubuntu@${{ secrets.EC2_HOST }}:~/myproject
 
-    - name: Deploy Docker Container on EC2
-      run: |
-        ssh -o StrictHostKeyChecking=no -i private_key.pem \
-        ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
-          cd ~/myproject
-          sudo docker stop mycontainer || true
-          sudo docker rm mycontainer || true
-          sudo docker build -t myapp .
-          sudo docker run -d -p 80:80 --name mycontainer myapp
-        EOF
+      - name: Deploy Docker Container
+        run: |
+          ssh -o StrictHostKeyChecking=no -i private_key.pem ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            cd ~/myproject
+            sudo docker stop mycontainer || true
+            sudo docker rm mycontainer || true
+            sudo docker build -t myapp .
+            sudo docker run -d -p 80:80 --name mycontainer myapp
+          EOF
