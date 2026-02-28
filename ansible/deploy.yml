@@ -1,50 +1,47 @@
 ---
 - name: Deploy MyProject on EC2
-  hosts: ec2
+  hosts: all
   become: yes
+  vars:
+    project_dir: /home/ubuntu/myproject
+    files_to_copy:
+      - { src: '../index.html', dest: '{{ project_dir }}/index.html' }
+      - { src: '../index.css', dest: '{{ project_dir }}/index.css' }
+      - { src: '../script.js', dest: '{{ project_dir }}/script.js' }
+      - { src: '../Dockerfile', dest: '{{ project_dir }}/Dockerfile' }
 
   tasks:
-    - name: Update apt cache
-      apt:
-        update_cache: yes
+
+    - name: Ensure project directory exists
+      ansible.builtin.file:
+        path: "{{ project_dir }}"
+        state: directory
+        mode: '0755'
 
     - name: Install required packages
-      apt:
-        name: "{{ item }}"
+      ansible.builtin.apt:
+        name:
+          - python3-pip
+          - docker.io
+        update_cache: yes
         state: present
-      loop:
-        - docker.io
-        - python3-pip
 
     - name: Add ubuntu user to docker group
-      user:
+      ansible.builtin.user:
         name: ubuntu
         groups: docker
         append: yes
 
     - name: Copy project files to EC2
-      copy:
+      ansible.builtin.copy:
         src: "{{ item.src }}"
         dest: "{{ item.dest }}"
-        mode: '0644'
-      loop:
-        - { src: "index.html", dest: "~/myproject/index.html" }
-        - { src: "index.css", dest: "~/myproject/index.css" }
-        - { src: "script.js", dest: "~/myproject/script.js" }
-        - { src: "Dockerfile", dest: "~/myproject/Dockerfile" }
+      loop: "{{ files_to_copy }}"
 
     - name: Build Docker image
-      community.docker.docker_image:
-        build:
-          path: ~/myproject
-        name: myproject
-        state: present
+      ansible.builtin.shell: docker build -t myapp "{{ project_dir }}"
+      args:
+        chdir: "{{ project_dir }}"
 
     - name: Run Docker container
-      community.docker.docker_container:
-        name: myproject
-        image: myproject
-        state: started
-        restart_policy: always
-        ports:
-          - "80:80"
+      ansible.builtin.shell: docker run -d -p 80:80 --name myapp myapp
