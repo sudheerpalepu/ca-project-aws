@@ -1,4 +1,4 @@
-name: Deploy MyProject to EC2
+name: CI/CD Deploy MyProject
 
 on:
   push:
@@ -8,39 +8,49 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
-      # 1️⃣ Checkout the repository
-      - name: Checkout code
+      # 1️⃣ Checkout code
+      - name: Checkout Repository
         uses: actions/checkout@v3
 
-      # 2️⃣ Configure SSH key
-      - name: Configure SSH key
+      # 2️⃣ List files for debugging
+      - name: List project files
+        run: ls -l
+
+      # 3️⃣ Set up SSH key for EC2
+      - name: Set up SSH key
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_KEY_BASE64 }}" | base64 --decode > ~/.ssh/assignmentkey.pem
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/assignmentkey.pem
           chmod 600 ~/.ssh/assignmentkey.pem
-          echo -e "Host *\n\tStrictHostKeyChecking no\n" >> ~/.ssh/config
 
-      # 3️⃣ Sync project files to EC2
+      # 4️⃣ Copy project files to EC2
       - name: Sync project to EC2
         run: |
-          rsync -avz --delete -e "ssh -i ~/.ssh/assignmentkey.pem" ./myproject/ ubuntu@${{ secrets.EC2_HOST }}:~/myproject/
+          rsync -avz --delete -e "ssh -i ~/.ssh/assignmentkey.pem -o StrictHostKeyChecking=no" \
+            ./myproject/ ubuntu@${{ secrets.EC2_HOST }}:~/myproject/
 
-      # 4️⃣ Build & Run Docker on EC2
+      # 5️⃣ Connect to EC2 and build/run Docker container
       - name: Build and run Docker on EC2
         run: |
-          ssh -i ~/.ssh/assignmentkey.pem ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
-          cd ~/myproject
-          # Remove previous container if exists
-          docker rm -f myapp || true
-          # Build Docker image
-          docker build -t myapp .
-          # Run container
-          docker run -d --name myapp -p 80:80 myapp
-          EOF
+          ssh -i ~/.ssh/assignmentkey.pem -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            set -e
 
-      # 5️⃣ Verify container is running
-      - name: Check container status
-        run: |
-          ssh -i ~/.ssh/assignmentkey.pem ubuntu@${{ secrets.EC2_HOST }} "docker ps"
+            echo "Stopping old container if exists..."
+            docker stop myapp || true
+            docker rm myapp || true
+
+            echo "Cleaning up old Docker images..."
+            docker rmi myapp || true
+            docker system prune -af
+
+            echo "Building Docker image..."
+            cd ~/myproject
+            docker build -t myapp .
+
+            echo "Running Docker container..."
+            docker run -d --name myapp -p 80:80 myapp
+
+            echo "Deployment complete!"
+            docker ps
+          EOF
